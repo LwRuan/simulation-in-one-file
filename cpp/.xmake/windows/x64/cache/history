@@ -1,0 +1,7 @@
+{
+    cmdlines = {
+        [[xmake l c:\Users\lwruan\.vscode\extensions\tboox.xmake-vscode-1.4.4\assets\update_intellisense.lua]],
+        "xmake run",
+        "xmake run lsmps"
+    }
+}
