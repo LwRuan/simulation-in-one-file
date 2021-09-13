@@ -1,11 +1,11 @@
 [
 {
   "directory": "/home/lwruan/projects/simulation-in-one-file/cpp",
-  "arguments": ["/usr/bin/ccache", "/usr/bin/gcc", "-c", "-m64", "-std=c++14", "-o", "build/.objs/mlsmpm/linux/x86_64/release/mls-mpm88.cpp.o", "mls-mpm88.cpp"],
-  "file": "mls-mpm88.cpp"
+  "arguments": ["/usr/bin/ccache", "/usr/bin/gcc", "-c", "-m64", "-std=c++14", "-I", "/home/lwruan/.xmake/packages/e/eigen/3.3.9/4741f970379048e09c876cd7735e7776/include", "-I", "/home/lwruan/.xmake/packages/e/eigen/3.3.9/4741f970379048e09c876cd7735e7776/include/eigen3", "-o", "build/.objs/lsmps/linux/x86_64/release/lsmps.cpp.o", "lsmps.cpp"],
+  "file": "lsmps.cpp"
 },
 {
   "directory": "/home/lwruan/projects/simulation-in-one-file/cpp",
-  "arguments": ["/usr/bin/ccache", "/usr/bin/gcc", "-c", "-m64", "-std=c++14", "-I", "/home/lwruan/.xmake/packages/e/eigen/3.3.9/4741f970379048e09c876cd7735e7776/include", "-I", "/home/lwruan/.xmake/packages/e/eigen/3.3.9/4741f970379048e09c876cd7735e7776/include/eigen3", "-o", "build/.objs/lsmps/linux/x86_64/release/lsmps.cpp.o", "lsmps.cpp"],
-  "file": "lsmps.cpp"
+  "arguments": ["/usr/bin/ccache", "/usr/bin/gcc", "-c", "-m64", "-std=c++14", "-o", "build/.objs/mlsmpm/linux/x86_64/release/mls-mpm88.cpp.o", "mls-mpm88.cpp"],
+  "file": "mls-mpm88.cpp"
 }]

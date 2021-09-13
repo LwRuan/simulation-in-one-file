@@ -1,82 +1,54 @@
 {
-    ["lib.detect.has_flags"] = {
-        ["linux_x86_64_/usr/bin/gcc_9.3.0-17ubuntu1_cxx___-O3"] = true,
-        ["linux_x86_64_/usr/bin/gcc_9.3.0-17ubuntu1_cxx_cxflags__-fvisibility-inlines-hidden"] = true,
-        ["linux_x86_64_/usr/bin/gcc_9.3.0-17ubuntu1_cxx_cxflags__-DNDEBUG"] = true
-    },
-    ["detect.tools.gcc.has_flags"] = {
-        ["/usr/bin/gcc_9.3.0-17ubuntu1"] = {
-            ["-B"] = true,
-            ["--target-help"] = true,
-            ["-pipe"] = true,
-            ["-shared"] = true,
-            ["-time"] = true,
-            ["-no-canonical-prefixes"] = true,
-            ["-save-temps"] = true,
-            ["-Xpreprocessor"] = true,
-            ["-Xassembler"] = true,
-            ["-print-sysroot-headers-suffix"] = true,
-            ["-print-sysroot"] = true,
-            ["-c"] = true,
-            ["-E"] = true,
-            ["-print-multi-os-directory"] = true,
-            ["-print-multi-lib"] = true,
-            ["-dumpspecs"] = true,
-            ["-dumpversion"] = true,
-            ["-dumpmachine"] = true,
-            ["--param"] = true,
-            ["-print-libgcc-file-name"] = true,
-            ["-print-multiarch"] = true,
-            ["-print-multi-directory"] = true,
-            ["-x"] = true,
-            ["-pie"] = true,
-            ["-print-search-dirs"] = true,
-            ["-Xlinker"] = true,
-            ["-v"] = true,
-            ["--help"] = true,
-            ["-o"] = true,
-            ["--version"] = true,
-            ["-pass-exit-codes"] = true,
-            ["-S"] = true
-        }
-    },
-    find_package_linux_x86_64_fetch_package_xmake = {
-        ["xmake::eigen_4741f970379048e09c876cd7735e7776_release_3.3.9_external"] = {
-            sysincludedirs = {
-                "/home/lwruan/.xmake/packages/e/eigen/3.3.9/4741f970379048e09c876cd7735e7776/include",
-                "/home/lwruan/.xmake/packages/e/eigen/3.3.9/4741f970379048e09c876cd7735e7776/include/eigen3"
-            }
-        }
-    },
-    find_program_fetch_package_system = {
-        cmake = "/usr/bin/cmake"
-    },
     find_program = {
+        ccache = "/usr/bin/ccache",
         git = "/usr/bin/git",
-        gcc = "/usr/bin/gcc",
-        tar = "/usr/bin/tar",
-        zig = false,
-        dmd = false,
-        ldc2 = false,
-        unzip = "/usr/bin/unzip",
         ["/usr/bin/gcc"] = "/usr/bin/gcc",
-        gdc = false,
-        gzip = "/usr/bin/gzip",
-        ccache = "/usr/bin/ccache"
-    },
-    find_programver_fetch_package_xmake = {
-        ["/usr/bin/cmake"] = "3.16.3"
-    },
-    find_program_gcc_arch_x86_64_plat_linux_checktoolcxx = {
-        gcc = "/usr/bin/gcc"
-    },
-    find_program_gcc_arch_x86_64_plat_linux_checktoolld = {
-        ["g++"] = "/usr/bin/g++"
-    },
-    find_program_fetch_package_xmake = {
-        cmake = "/usr/bin/cmake"
+        ping = "/usr/bin/ping"
     },
     find_programver = {
         ["/usr/bin/gcc"] = "9.3.0-17ubuntu1"
+    },
+    ["lib.detect.has_flags"] = {
+        ["linux_x86_64_/usr/bin/gcc_9.3.0-17ubuntu1_cxx___-O3"] = true,
+        ["linux_x86_64_/usr/bin/gcc_9.3.0-17ubuntu1_cxx_cxflags__-fdiagnostics-color=always"] = true,
+        ["linux_x86_64_/usr/bin/gcc_9.3.0-17ubuntu1_cxx_cxflags__-fvisibility-inlines-hidden"] = true,
+        ["linux_x86_64_/usr/bin/gcc_9.3.0-17ubuntu1_cxx_cxflags__-DNDEBUG"] = true,
+        ["linux_x86_64_/usr/bin/gcc_9.3.0-17ubuntu1_cxx_cxflags__-MMD -MF"] = true
+    },
+    ["detect.tools.gcc.has_flags"] = {
+        ["/usr/bin/gcc_9.3.0-17ubuntu1"] = {
+            ["-print-multi-directory"] = true,
+            ["-print-multi-lib"] = true,
+            ["-print-multi-os-directory"] = true,
+            ["-print-sysroot"] = true,
+            ["-print-sysroot-headers-suffix"] = true,
+            ["-Xassembler"] = true,
+            ["-Xpreprocessor"] = true,
+            ["-save-temps"] = true,
+            ["-no-canonical-prefixes"] = true,
+            ["--help"] = true,
+            ["-B"] = true,
+            ["-E"] = true,
+            ["-pie"] = true,
+            ["--param"] = true,
+            ["-x"] = true,
+            ["-c"] = true,
+            ["-S"] = true,
+            ["-time"] = true,
+            ["-dumpmachine"] = true,
+            ["--version"] = true,
+            ["-o"] = true,
+            ["-pipe"] = true,
+            ["-dumpspecs"] = true,
+            ["-Xlinker"] = true,
+            ["-pass-exit-codes"] = true,
+            ["--target-help"] = true,
+            ["-shared"] = true,
+            ["-dumpversion"] = true,
+            ["-v"] = true,
+            ["-print-search-dirs"] = true,
+            ["-print-libgcc-file-name"] = true,
+            ["-print-multiarch"] = true
+        }
     }
 }

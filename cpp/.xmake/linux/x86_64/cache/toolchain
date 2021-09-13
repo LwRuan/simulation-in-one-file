@@ -1,42 +1,42 @@
 {
     tool_target_lsmps_linux_x86_64_ld = {
         program = "/usr/bin/g++",
+        toolname = "gxx",
         toolchain_info = {
-            cachekey = "gcc_arch_x86_64_plat_linux",
-            arch = "x86_64",
             name = "gcc",
-            plat = "linux"
-        },
-        toolname = "gxx"
-    },
-    tool_target_lsmps_linux_x86_64_cxx = {
-        program = "/usr/bin/gcc",
-        toolchain_info = {
-            cachekey = "gcc_arch_x86_64_plat_linux",
+            plat = "linux",
             arch = "x86_64",
-            name = "gcc",
-            plat = "linux"
-        },
-        toolname = "gcc"
-    },
-    tool_target_mlsmpm_linux_x86_64_cxx = {
-        program = "/usr/bin/gcc",
-        toolchain_info = {
-            cachekey = "gcc_arch_x86_64_plat_linux",
-            arch = "x86_64",
-            name = "gcc",
-            plat = "linux"
-        },
-        toolname = "gcc"
+            cachekey = "gcc_arch_x86_64_plat_linux"
+        }
     },
     tool_target_mlsmpm_linux_x86_64_ld = {
         program = "/usr/bin/g++",
+        toolname = "gxx",
         toolchain_info = {
-            cachekey = "gcc_arch_x86_64_plat_linux",
-            arch = "x86_64",
             name = "gcc",
-            plat = "linux"
-        },
-        toolname = "gxx"
+            plat = "linux",
+            arch = "x86_64",
+            cachekey = "gcc_arch_x86_64_plat_linux"
+        }
+    },
+    tool_target_mlsmpm_linux_x86_64_cxx = {
+        program = "/usr/bin/gcc",
+        toolname = "gcc",
+        toolchain_info = {
+            name = "gcc",
+            plat = "linux",
+            arch = "x86_64",
+            cachekey = "gcc_arch_x86_64_plat_linux"
+        }
+    },
+    tool_target_lsmps_linux_x86_64_cxx = {
+        program = "/usr/bin/gcc",
+        toolname = "gcc",
+        toolchain_info = {
+            name = "gcc",
+            plat = "linux",
+            arch = "x86_64",
+            cachekey = "gcc_arch_x86_64_plat_linux"
+        }
     }
 }

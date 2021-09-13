@@ -1,5 +1,7 @@
 {
     eigen = {
+        __enabled = true,
+        __installdir = "/home/lwruan/.xmake/packages/e/eigen/3.3.9/4741f970379048e09c876cd7735e7776",
         __requirestr = "eigen",
         envs = {
             LD_LIBRARY_PATH = {
@@ -10,11 +12,9 @@
                 "/home/lwruan/.xmake/packages/c/cmake/3.21.0/16347bf4b1f249d7a886eea8c15a6ea8/bin"
             }
         },
-        __enabled = true,
         sysincludedirs = {
             "/home/lwruan/.xmake/packages/e/eigen/3.3.9/4741f970379048e09c876cd7735e7776/include",
             "/home/lwruan/.xmake/packages/e/eigen/3.3.9/4741f970379048e09c876cd7735e7776/include/eigen3"
-        },
-        __installdir = "/home/lwruan/.xmake/packages/e/eigen/3.3.9/4741f970379048e09c876cd7735e7776"
+        }
     }
 }
