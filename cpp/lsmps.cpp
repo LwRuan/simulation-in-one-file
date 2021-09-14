@@ -20,8 +20,10 @@ using SpMatd = Eigen::SparseMatrix<double>;
 using Tripletd = Eigen::Triplet<double>;
 template <int d>
 using Vec = Eigen::Matrix<real, d, 1>;
-template <int d>
-using Mat = Eigen::Matrix<real, d, d>;
+//template <int d>
+//using Mat = Eigen::Matrix<real, d, d>;
+template <int m, int n=m>
+using Mat = Eigen::Matrix<real, m, n>;
 #define PI 3.141592653589793238463
 
 // Constants
@@ -42,12 +44,15 @@ real rs = re / 2;
 real alpha = 1e-2; // particle shifting
 real eps = 1e-3;
 real n0; //reference particle density
+Eigen::DiagonalMatrix<real, 5> Hrs;
+Eigen::DiagonalMatrix<real, 5> H1_inv;
 
 // Data
 std::array<Vec2, N> X, V, V_a, V_star;
 std::array<real, N> Pr;
+std::array<char, N> Lable; // 0=free, 1=near boundary
 Vec2 domain_min = Vec2(0.0, 0.0), domain_max = Vec2(1.0, 1.0);
-std::array<Mat<5>, N> M_inv;
+std::array<Mat<5>, N> M;
 using Bucket = std::array<int, bucket_size>;
 std::array<Bucket, grid_res * grid_res> hashing;
 std::array<Vec2, Nb> X_b, N_b;
@@ -68,15 +73,15 @@ inline real Wa(real r)
     return ret;
 };
 
-inline real Wup(real r, real theta)
+inline real Wup(real r, real costheta)
 {
-    return W(r) * std::max(cos(2 * theta), eps);
+    return W(r) * std::max(2*costheta*costheta-1, eps);
 }
 
-inline Vec<5> P(const Vec2 &r)
+inline Vec<5> P(const Vec2 &r, real _rs)
 {
     Vec<5> ret;
-    ret << r(0) / rs, r(1) / rs, r(0) * r(0) / rs, r(0) * r(1) / rs, r(1) * r(1) / rs;
+    ret << r(0) / _rs, r(1) / _rs, r(0) * r(0) / _rs, r(0) * r(1) / _rs, r(1) * r(1) / _rs;
     return ret;
 }
 
@@ -107,8 +112,33 @@ void reset_hashing()
     }
 }
 
+void compute_M()
+{
+    for (int i = 0; i < N; ++i)
+    {
+        M[i] = Mat<5>::Zero();
+        Vec2i coord = (X[i] * dx_inv).cast<int>();
+        for (int d = 0; d < 9; ++d)
+        {
+            Vec2i nb = coord + nb_dirs[d];
+            if (!valid_cell(nb))
+                continue;
+            Bucket &bucket = hashing[nb[0] * grid_res + nb[1]];
+            for (int p = 1; p <= bucket[0]; ++p)
+            {
+                int j = bucket[p];
+                if(i==j) continue;
+                Vec<5> pij = P(X[j] - X[i], rs);
+                M[i] += W((X[j] - X[i]).norm()) * pij * pij.transpose();
+            }
+        }
+    }
+}
+
 void init()
 {
+    Hrs.diagonal() << 1 / rs, 1 / rs, 2 / (rs * rs), 1 / (rs * rs), 2 / (rs * rs);
+    H1_inv.diagonal() << 1, 1, 0.5, 1, 0.5;
     //free particles
     std::fill(V.begin(), V.end(), Vec2::Zero());
     real tdx = R / Nx;
@@ -168,7 +198,25 @@ void advection_and_force()
     for (int i = 0; i < N; ++i)
     {
         V_star[i] = V[i] /*+ dt * grav*/;
-        //TODO: covection term
+        Mat<5> m_inv = M[i].inverse();
+        Mat<2, 5> v_grad = Mat<2, 5>::Zero();
+        Vec2i coord = (X[i] * dx_inv).cast<int>();
+        for (int d = 0; d < 9; ++d)
+        {
+            Vec2i nb = coord + nb_dirs[d];
+            if (!valid_cell(nb))
+                continue;
+            Bucket &bucket = hashing[nb[0] * grid_res + nb[1]];
+            for (int p = 1; p <= bucket[0]; ++p)
+            {
+                int j = bucket[p];
+                if(i==j) continue;
+                Vec2 rij = X[j]-X[i];
+                real costheta = rij.normalized().dot((V_a[i]-V[i]).normalized());
+                v_grad += rij * (Hrs * m_inv * Wup(rij.norm(), costheta) * P(rij, rs)).transpose();
+            }
+        }
+        V_star[i] += v_grad * H1_inv * P(dt*(V_a[i]-V[i]), 1);
     }
 }
 
@@ -198,6 +246,7 @@ void advance()
 {
     reset_hashing();
     particle_shifting();
+    compute_M();
     advection_and_force();
     update_position();
     solve_pressure();

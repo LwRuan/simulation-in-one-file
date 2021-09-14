@@ -2,6 +2,8 @@
     files = {
         "lsmps.cpp"
     },
+    depfiles_gcc = "build/.objs/lsmps/linux/x86_64/release/lsmps.cpp.o: lsmps.cpp taichi.h\
+",
     values = {
         "/usr/bin/gcc",
         {
@@ -16,7 +18,5 @@
             "/home/lwruan/.xmake/packages/e/eigen/3.3.9/4741f970379048e09c876cd7735e7776/include/eigen3",
             "-DNDEBUG"
         }
-    },
-    depfiles_gcc = "build/.objs/lsmps/linux/x86_64/release/lsmps.cpp.o: lsmps.cpp taichi.h\
-"
+    }
 }
