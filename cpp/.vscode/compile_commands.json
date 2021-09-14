@@ -1,11 +1,11 @@
 [
 {
-  "directory": "/home/lwruan/projects/simulation-in-one-file/cpp",
-  "arguments": ["/usr/bin/ccache", "/usr/bin/gcc", "-c", "-m64", "-std=c++14", "-I", "/home/lwruan/.xmake/packages/e/eigen/3.3.9/4741f970379048e09c876cd7735e7776/include", "-I", "/home/lwruan/.xmake/packages/e/eigen/3.3.9/4741f970379048e09c876cd7735e7776/include/eigen3", "-o", "build/.objs/lsmps/linux/x86_64/release/lsmps.cpp.o", "lsmps.cpp"],
+  "directory": "D:\\lwruan\\simulation-in-one-file\\cpp",
+  "arguments": ["C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community\\VC\\Tools\\MSVC\\14.27.29110\\bin\\HostX64\\x64\\cl.exe", "/c", "/EHsc", "/nologo", "/std:c++14", "/ID:\\lwruan\\xmake-packages\\e\\eigen\\3.3.9\\52773ec443024fe29e39813a6e9e1712\\include", "/ID:\\lwruan\\xmake-packages\\e\\eigen\\3.3.9\\52773ec443024fe29e39813a6e9e1712\\include\\eigen3", "/Fobuild\\.objs\\lsmps\\windows\\x64\\release\\lsmps.cpp.obj", "lsmps.cpp"],
   "file": "lsmps.cpp"
 },
 {
-  "directory": "/home/lwruan/projects/simulation-in-one-file/cpp",
-  "arguments": ["/usr/bin/ccache", "/usr/bin/gcc", "-c", "-m64", "-std=c++14", "-o", "build/.objs/mlsmpm/linux/x86_64/release/mls-mpm88.cpp.o", "mls-mpm88.cpp"],
+  "directory": "D:\\lwruan\\simulation-in-one-file\\cpp",
+  "arguments": ["C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community\\VC\\Tools\\MSVC\\14.27.29110\\bin\\HostX64\\x64\\cl.exe", "/c", "/EHsc", "/nologo", "/std:c++14", "/Fobuild\\.objs\\mlsmpm\\windows\\x64\\release\\mls-mpm88.cpp.obj", "mls-mpm88.cpp"],
   "file": "mls-mpm88.cpp"
 }]

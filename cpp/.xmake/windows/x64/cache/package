@@ -6,12 +6,12 @@
                 [[D:\lwruan\xmake-packages\c\cmake\3.21.0\b14e2ab395d54ecd9721929979be4a98\bin]]
             }
         },
-        __requirestr = "eigen",
         sysincludedirs = {
             [[D:\lwruan\xmake-packages\e\eigen\3.3.9\52773ec443024fe29e39813a6e9e1712\include]],
             [[D:\lwruan\xmake-packages\e\eigen\3.3.9\52773ec443024fe29e39813a6e9e1712\include\eigen3]]
         },
-        __enabled = true,
-        __installdir = [[D:\lwruan\xmake-packages\e\eigen\3.3.9\52773ec443024fe29e39813a6e9e1712]]
+        __installdir = [[D:\lwruan\xmake-packages\e\eigen\3.3.9\52773ec443024fe29e39813a6e9e1712]],
+        __requirestr = "eigen",
+        __enabled = true
     }
 }

@@ -3,6 +3,7 @@
 #include <cmath>
 #include <vector>
 #include <array>
+#include <algorithm>
 
 #include <Eigen/Sparse>
 #include <Eigen/Dense>
@@ -22,18 +23,29 @@ using Vec = Eigen::Matrix<real, d, 1>;
 template <int d>
 using Mat = Eigen::Matrix<real, d, d>;
 #define PI 3.141592653589793238463
+
 // Constants
 const int Nx = 20, N = Nx * Nx; // free particles
 const int Nw = 30, Nb = 4 * Nw; // boundary particles
-const int grid_res = 20, window_size = 800;
+const int grid_res = 10, window_size = 800;
 const int bucket_size = 64;
 const real dx = 1.0 / grid_res, dx_inv = (real)grid_res;
-const real R = 0.5;
-const real l0 = sqrt(R * R / N);
-const real re = 3.1 * l0;
-const real rs = re / 2;
+const real R = 0.5; //init rect side length
+const Vec2i nb_dirs[9] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0}, {-1, -1}, {0, -1}, {1, -1}};
+
+//parameters
+real l0 = sqrt(R * R / N);
+real dt = 1e-2;
+Vec2 grav{0, -9.8};
+real re = 3.1 * l0;
+real rs = re / 2;
+real alpha = 1e-2; // particle shifting
+real eps = 1e-3;
+real n0; //reference particle density
+
 // Data
-std::array<Vec2, N> X, V;
+std::array<Vec2, N> X, V, V_a, V_star;
+std::array<real, N> Pr;
 Vec2 domain_min = Vec2(0.0, 0.0), domain_max = Vec2(1.0, 1.0);
 std::array<Mat<5>, N> M_inv;
 using Bucket = std::array<int, bucket_size>;
@@ -48,11 +60,29 @@ inline real W(real r)
     return ret;
 }
 
+inline real Wa(real r)
+{
+    real ret = 0.0;
+    if (r < re)
+        ret = re / r - 1;
+    return ret;
+};
+
+inline real Wup(real r, real theta)
+{
+    return W(r) * std::max(cos(2 * theta), eps);
+}
+
 inline Vec<5> P(const Vec2 &r)
 {
     Vec<5> ret;
     ret << r(0) / rs, r(1) / rs, r(0) * r(0) / rs, r(0) * r(1) / rs, r(1) * r(1) / rs;
     return ret;
+}
+
+inline bool valid_cell(const Vec2i &c)
+{
+    return (c[0] >= 0) && (c[0] < grid_res) && (c[1] >= 0) && (c[1] < grid_res);
 }
 
 void reset_hashing()
@@ -61,7 +91,7 @@ void reset_hashing()
     for (int i = 0; i < N; ++i)
     {
         Vec2i coord = (X[i] * dx_inv).cast<int>();
-        if (coord[0] < 0 || coord[0] >= grid_res || coord[1] < 0 || coord[1] >= grid_res)
+        if (!valid_cell(coord))
         {
             std::cerr << "[Error]out of box" << std::endl;
             exit(1);
@@ -79,15 +109,22 @@ void reset_hashing()
 
 void init()
 {
+    //free particles
     std::fill(V.begin(), V.end(), Vec2::Zero());
     real tdx = R / Nx;
+    n0 = 0.0;
+    Vec2 ref_X = Vec2(0.5 - R / 2 + tdx * (Nx / 2), 0.5 - R / 2 + tdx * (Nx / 2));
     for (int i = 0; i < Nx; ++i)
     {
         for (int j = 0; j < Nx; ++j)
         {
             X[i * Nx + j] = Vec2(0.5 - R / 2 + tdx * i, 0.5 - R / 2 + tdx * j);
+            if ((i != Nx / 2) && (j != Nx / 2))
+                n0 += Wa((X[i * Nx + j] - ref_X).norm());
         }
     }
+
+    //wall boundary
     real tdw = 0.9 / Nw;
     Vec2 norms[4] = {Vec2(0.0, 1.0), Vec2(-1.0, 0.0), Vec2(0.0, -1.0), Vec2(1.0, 0.0)};
     Vec2 dirs[4] = {Vec2(1.0, 0.0), Vec2(0.0, 1.0), Vec2(-1.0, 0.0), Vec2(0.0, -1.0)};
@@ -102,14 +139,80 @@ void init()
     }
 }
 
+void particle_shifting()
+{
+    for (int i = 0; i < N; ++i)
+    {
+        Vec2 delta = Vec2::Zero();
+        Vec2i coord = (X[i] * dx_inv).cast<int>();
+        for (int d = 0; d < 9; ++d)
+        {
+            Vec2i nb = coord + nb_dirs[d];
+            if (!valid_cell(nb))
+                continue;
+            Bucket &bucket = hashing[nb[0] * grid_res + nb[1]];
+            for (int p = 1; p <= bucket[0]; ++p)
+            {
+                int j = bucket[p];
+                real rij = (X[j] - X[i]).norm();
+                if (j != i)
+                    delta -= alpha * l0 * l0 * 2 / n0 * Wa(rij) * (X[j] - X[i]) / (rij * rij);
+            }
+        }
+        V_a[i] = V[i] + delta / dt;
+    }
+}
+
+void advection_and_force()
+{
+    for (int i = 0; i < N; ++i)
+    {
+        V_star[i] = V[i] /*+ dt * grav*/;
+        //TODO: covection term
+    }
+}
+
+void update_position()
+{
+    for (int i = 0; i < N; ++i)
+    {
+        X[i] += V_a[i] * dt;
+    }
+}
+
+void solve_pressure()
+{
+    //TODO: solve pressure
+}
+
+void projection()
+{
+    for (int i = 0; i < N; ++i)
+    {
+        V[i] = V_star[i];
+        //TODO: pressure gradient
+    }
+}
+
+void advance()
+{
+    reset_hashing();
+    particle_shifting();
+    advection_and_force();
+    update_position();
+    solve_pressure();
+    projection();
+}
+
 int main()
 {
     init();
-    reset_hashing();
+    std::cout << "re: " << re << " dx: " << dx << std::endl;
     taichi::GUI gui("LSMPS", window_size, window_size);
     auto &canvas = gui.get_canvas();
     while (true)
     {
+        advance();
         canvas.clear(0x112F41);
         //canvas.rect(taichi::Vector2(0.04), taichi::Vector2(0.96)).radius(2).color(0x4FB99F).close();
         for (int i = 0; i < N; ++i)

@@ -1,24 +1,4 @@
 {
-    values = {
-        [[C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.27.29110\bin\HostX64\x64\cl.exe]],
-        {
-            "/EHsc",
-            "-nologo",
-            "-Ox",
-            "-fp:fast",
-            "-std:c++14",
-            "-experimental:external",
-            "-external:W0",
-            [[-external:ID:\lwruan\xmake-packages\e\eigen\3.3.9\52773ec443024fe29e39813a6e9e1712\include]],
-            "-experimental:external",
-            "-external:W0",
-            [[-external:ID:\lwruan\xmake-packages\e\eigen\3.3.9\52773ec443024fe29e39813a6e9e1712\include\eigen3]],
-            "-DNDEBUG"
-        }
-    },
-    files = {
-        "lsmps.cpp"
-    },
     depfiles_cl_json = "{\
     \"Version\": \"1.0\",\
     \"Data\": {\
@@ -664,5 +644,25 @@
         ],\
         \"Modules\": []\
     }\
-}"
+}",
+    values = {
+        [[C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.27.29110\bin\HostX64\x64\cl.exe]],
+        {
+            "/EHsc",
+            "-nologo",
+            "-Ox",
+            "-fp:fast",
+            "-std:c++14",
+            "-experimental:external",
+            "-external:W0",
+            [[-external:ID:\lwruan\xmake-packages\e\eigen\3.3.9\52773ec443024fe29e39813a6e9e1712\include]],
+            "-experimental:external",
+            "-external:W0",
+            [[-external:ID:\lwruan\xmake-packages\e\eigen\3.3.9\52773ec443024fe29e39813a6e9e1712\include\eigen3]],
+            "-DNDEBUG"
+        }
+    },
+    files = {
+        "lsmps.cpp"
+    }
 }
