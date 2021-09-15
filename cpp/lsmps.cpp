@@ -13,16 +13,13 @@ using real = double;
 using Vec2 = Eigen::Matrix<real, 2, 1>;
 using Vec2i = Eigen::Vector2i;
 using Mat2 = Eigen::Matrix<real, 2, 2>;
-using VecX = Eigen::Matrix<real, -1, 1>;
-using MatX = Eigen::Matrix<real, -1, -1>;
-using SpVecd = Eigen::SparseVector<double>;
-using SpMatd = Eigen::SparseMatrix<double>;
-using Tripletd = Eigen::Triplet<double>;
+using SpMat = Eigen::SparseMatrix<real>;
+using Triplet = Eigen::Triplet<real>;
 template <int d>
 using Vec = Eigen::Matrix<real, d, 1>;
 //template <int d>
 //using Mat = Eigen::Matrix<real, d, d>;
-template <int m, int n=m>
+template <int m, int n = m>
 using Mat = Eigen::Matrix<real, m, n>;
 #define PI 3.141592653589793238463
 
@@ -46,16 +43,19 @@ real eps = 1e-3;
 real n0; //reference particle density
 Eigen::DiagonalMatrix<real, 5> Hrs;
 Eigen::DiagonalMatrix<real, 5> H1_inv;
+Vec2 bound_min = Vec2(0.05, 0.05), bound_max = Vec2(0.95, 0.95);
 
 // Data
 std::array<Vec2, N> X, V, V_a, V_star;
 std::array<real, N> Pr;
 std::array<char, N> Lable; // 0=free, 1=near boundary
-Vec2 domain_min = Vec2(0.0, 0.0), domain_max = Vec2(1.0, 1.0);
 std::array<Mat<5>, N> M;
 using Bucket = std::array<int, bucket_size>;
 std::array<Bucket, grid_res * grid_res> hashing;
 std::array<Vec2, Nb> X_b, N_b;
+std::vector<Triplet> triplets;
+SpMat Laplacian;
+Vec<N> rhs;
 
 inline real W(real r)
 {
@@ -75,7 +75,7 @@ inline real Wa(real r)
 
 inline real Wup(real r, real costheta)
 {
-    return W(r) * std::max(2*costheta*costheta-1, eps);
+    return W(r) * std::max(2 * costheta * costheta - 1, eps);
 }
 
 inline Vec<5> P(const Vec2 &r, real _rs)
@@ -88,6 +88,12 @@ inline Vec<5> P(const Vec2 &r, real _rs)
 inline bool valid_cell(const Vec2i &c)
 {
     return (c[0] >= 0) && (c[0] < grid_res) && (c[1] >= 0) && (c[1] < grid_res);
+}
+
+inline bool near_boundary(const Vec2 &r)
+{
+    return (r[0] < bound_min[0] + re) || (r[0] > bound_max[0] - re) ||
+           (r[1] < bound_min[1] + re) || (r[1] > bound_max[1] - re);
 }
 
 void reset_hashing()
@@ -127,7 +133,8 @@ void compute_M()
             for (int p = 1; p <= bucket[0]; ++p)
             {
                 int j = bucket[p];
-                if(i==j) continue;
+                if (i == j)
+                    continue;
                 Vec<5> pij = P(X[j] - X[i], rs);
                 M[i] += W((X[j] - X[i]).norm()) * pij * pij.transpose();
             }
@@ -155,10 +162,11 @@ void init()
     }
 
     //wall boundary
-    real tdw = 0.9 / Nw;
+    real tdw = (bound_max[0] - bound_min[0]) / Nw;
     Vec2 norms[4] = {Vec2(0.0, 1.0), Vec2(-1.0, 0.0), Vec2(0.0, -1.0), Vec2(1.0, 0.0)};
     Vec2 dirs[4] = {Vec2(1.0, 0.0), Vec2(0.0, 1.0), Vec2(-1.0, 0.0), Vec2(0.0, -1.0)};
-    Vec2 offsets[4] = {Vec2(0.05 + tdw / 2, 0.05), Vec2(0.95, 0.05 + tdw / 2), Vec2(0.95 - tdw / 2, 0.95), Vec2(0.05, 0.95 - tdw / 2)};
+    Vec2 offsets[4] = {Vec2(bound_min[0] + tdw / 2, bound_min[1]), Vec2(bound_max[0], bound_min[1] + tdw / 2),
+                       Vec2(bound_max[0] - tdw / 2, bound_max[1]), Vec2(bound_min[0], bound_max[1] - tdw / 2)};
     for (int i = 0; i < Nw; ++i)
     {
         for (int j = 0; j < 4; ++j)
@@ -167,6 +175,8 @@ void init()
             X_b[j * Nw + i] = offsets[j] + i * tdw * dirs[j];
         }
     }
+    reset_hashing();
+    compute_M();
 }
 
 void particle_shifting()
@@ -210,13 +220,14 @@ void advection_and_force()
             for (int p = 1; p <= bucket[0]; ++p)
             {
                 int j = bucket[p];
-                if(i==j) continue;
-                Vec2 rij = X[j]-X[i];
-                real costheta = rij.normalized().dot((V_a[i]-V[i]).normalized());
+                if (i == j)
+                    continue;
+                Vec2 rij = X[j] - X[i];
+                real costheta = rij.normalized().dot((V_a[i] - V[i]).normalized());
                 v_grad += rij * (Hrs * m_inv * Wup(rij.norm(), costheta) * P(rij, rs)).transpose();
             }
         }
-        V_star[i] += v_grad * H1_inv * P(dt*(V_a[i]-V[i]), 1);
+        V_star[i] += v_grad * H1_inv * P(dt * (V_a[i] - V[i]), 1);
     }
 }
 
@@ -231,6 +242,28 @@ void update_position()
 void solve_pressure()
 {
     //TODO: solve pressure
+    Laplacian.setZero();
+    Laplacian.resize(N, N);
+    rhs.setZero();
+    for (int i = 0; i < N; ++i)
+    {
+        bool is_near_boundary = near_boundary(X[i]);
+        Vec2i coord = (X[i] * dx_inv).cast<int>();
+        for (int d = 0; d < 9; ++d)
+        {
+            Vec2i nb = coord + nb_dirs[d];
+            if (!valid_cell(nb))
+                continue;
+            Bucket &bucket = hashing[nb[0] * grid_res + nb[1]];
+            for (int p = 1; p <= bucket[0]; ++p)
+            {
+                int j = bucket[p];
+                if (i == j)
+                    continue;
+                
+            }
+        }
+    }
 }
 
 void projection()
@@ -244,11 +277,11 @@ void projection()
 
 void advance()
 {
-    reset_hashing();
     particle_shifting();
-    compute_M();
     advection_and_force();
     update_position();
+    reset_hashing();
+    compute_M();
     solve_pressure();
     projection();
 }
