@@ -7,6 +7,7 @@
 
 #include <Eigen/Sparse>
 #include <Eigen/Dense>
+#include <unsupported/Eigen/SparseExtra>
 
 // Math Type
 using real = double;
@@ -41,22 +42,24 @@ real rs = re / 2;
 real alpha = 1e-2; // particle shifting
 real eps = 1e-3;
 real n0; //reference particle density
+real rho = 1.0;
 Eigen::DiagonalMatrix<real, 5> Hrs;
+Eigen::DiagonalMatrix<real, 6> Hhat;
 Eigen::DiagonalMatrix<real, 5> H1_inv;
 Vec2 bound_min = Vec2(0.05, 0.05), bound_max = Vec2(0.95, 0.95);
 
 // Data
+int current_frame;
 std::array<Vec2, N> X, V, V_a, V_star;
-std::array<real, N> Pr;
 std::array<char, N> Lable; // 0=free, 1=near boundary
-std::array<Mat<5>, N> M;
-std::array<Mat<5>, N> M_n;
+std::array<Mat<5>, N> M, M_n;
+std::array<Mat<6>, N> M_hat;
 using Bucket = std::array<int, bucket_size>;
 std::array<Bucket, grid_res * grid_res> hashing;
 std::array<Vec2, Nb> X_b, N_b;
 std::vector<Triplet> triplets;
 SpMat Laplacian;
-Vec<N> rhs;
+Vec<N> rhs, Pr;
 
 inline real W(real r)
 {
@@ -83,6 +86,13 @@ inline Vec<5> P(const Vec2 &r, real _rs)
 {
     Vec<5> ret;
     ret << r(0) / _rs, r(1) / _rs, r(0) * r(0) / _rs, r(0) * r(1) / _rs, r(1) * r(1) / _rs;
+    return ret;
+}
+
+inline Vec<6> Phat(const Vec<2> &r, real _rs)
+{
+    Vec<6> ret;
+    ret << 1, r(0) / _rs, r(1) / _rs, r(0) * r(0) / _rs, r(0) * r(1) / _rs, r(1) * r(1) / _rs;
     return ret;
 }
 
@@ -131,6 +141,7 @@ void compute_M()
     for (int i = 0; i < N; ++i)
     {
         M[i] = Mat<5>::Zero();
+        M_hat[i] = Mat<6>::Zero();
         Vec2i coord = (X[i] * dx_inv).cast<int>();
         for (int d = 0; d < 9; ++d)
         {
@@ -142,9 +153,16 @@ void compute_M()
             {
                 int j = bucket[p];
                 if (i == j)
+                {
+                    Vec<6> phat = Phat(Vec2::Zero(), rs);
+                    //if (near_boundary(X[i]))
+                    //    M_hat[i] += W(0) * phat * phat.transpose();
                     continue;
+                }
                 Vec<5> pij = P(X[j] - X[i], rs);
+                Vec<6> phat = Phat(X[j] - X[i], rs);
                 M[i] += W((X[j] - X[i]).norm()) * pij * pij.transpose();
+                M_hat[i] += W((X[j] - X[i]).norm()) * phat * phat.transpose();
             }
         }
     }
@@ -167,6 +185,7 @@ void compute_M()
 void init()
 {
     Hrs.diagonal() << 1 / rs, 1 / rs, 2 / (rs * rs), 1 / (rs * rs), 2 / (rs * rs);
+    Hhat.diagonal() << 1, 1 / rs, 1 / rs, 2 / (rs * rs), 1 / (rs * rs), 2 / (rs * rs);
     H1_inv.diagonal() << 1, 1, 0.5, 1, 0.5;
     //free particles
     std::fill(V.begin(), V.end(), Vec2::Zero());
@@ -271,6 +290,9 @@ void solve_pressure()
     {
         bool is_near_boundary = near_boundary(X[i]);
         Mat<5> m_inv = M[i].inverse();
+        Mat<5> mn_inv;
+        if (is_near_boundary)
+            mn_inv = (M[i] + M_n[i]).inverse();
         Vec2i coord = (X[i] * dx_inv).cast<int>();
         real dig = 0.0;
         for (int d = 0; d < 9; ++d)
@@ -287,6 +309,9 @@ void solve_pressure()
                 Vec2 rij = X[j] - X[i];
                 if (is_near_boundary)
                 {
+                    Vec<5> partial = Hrs * mn_inv * W(rij.norm()) * P(rij, rs);
+                    triplets.push_back(Triplet(i, j, -partial[2] - partial[4]));
+                    dig += (partial[2] + partial[4]);
                 }
                 else
                 {
@@ -296,7 +321,50 @@ void solve_pressure()
                 }
             }
         }
+        Vec<5> rhs_i = Vec<5>::Zero();
+        for (int j = 0; j < Nb; ++j)
+        {
+            Vec2 rij = X_b[j] - X[i];
+            if (rij.norm() > re)
+                continue;
+            real p_n = rho / dt * V_star[i].dot(N_b[j]);
+            rhs_i += Hrs * mn_inv * W(rij.norm()) * Q(rij, N_b[j], rs) * rs * p_n;
+        }
+        rhs[i] += (rhs_i[2] + rhs_i[4]);
+        triplets.push_back(Triplet(i, i, dig));
     }
+
+    for (int i = 0; i < N; ++i)
+    {
+        Mat<6> m_inv = M_hat[i].inverse();
+        Vec2i coord = (X[i] * dx_inv).cast<int>();
+        real div_v = 0.0;
+        for (int d = 0; d < 9; ++d)
+        {
+            Vec2i nb = coord + nb_dirs[d];
+            if (!valid_cell(nb))
+                continue;
+            Bucket &bucket = hashing[nb[0] * grid_res + nb[1]];
+            for (int p = 1; p <= bucket[0]; ++p)
+            {
+                int j = bucket[p];
+                if ((i == j)/* && (!near_boundary(X[i]))*/)
+                    continue;
+                Vec<2> rij = X[j] - X[i];
+                Vec<6> partial = Hhat * m_inv * W(rij.norm()) * Phat(rij, rs);
+                div_v += (partial[1] * V_star[j][0] + partial[2] * V_star[j][1]);
+            }
+        }
+        rhs[i] -= rho / dt * div_v;
+    }
+
+    Laplacian.setFromTriplets(triplets.begin(), triplets.end());
+    if(current_frame==0)
+        Eigen::saveMarket(Laplacian, "debug.mtx");
+    Eigen::ConjugateGradient<SpMat, Eigen::Lower|Eigen::Upper> solver;
+    solver.compute(Laplacian);
+    Pr = solver.solve(rhs);
+    std::cout << "[iters: " << solver.iterations() << " error: " << solver.error() << "]" << std::endl;
 }
 
 void projection()
@@ -305,6 +373,8 @@ void projection()
     {
         V[i] = V_star[i];
         //TODO: pressure gradient
+        Mat<5> m_inv = M[i].inverse();
+
     }
 }
 
@@ -325,7 +395,7 @@ int main()
     std::cout << "re: " << re << " dx: " << dx << std::endl;
     taichi::GUI gui("LSMPS", window_size, window_size);
     auto &canvas = gui.get_canvas();
-    while (true)
+    for(current_frame=0;;++current_frame)
     {
         advance();
         canvas.clear(0x112F41);
