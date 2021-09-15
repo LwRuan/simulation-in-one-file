@@ -36,10 +36,10 @@ const Vec2i nb_dirs[9] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0}, {-1,
 //parameters
 real l0 = sqrt(R * R / N);
 real dt = 1e-2;
-Vec2 grav{0, -9.8};
+Vec2 grav{0, -1.0};
 real re = 3.1 * l0;
 real rs = re / 2;
-real alpha = 1e-2; // particle shifting
+real alpha = 0.0; // particle shifting
 real eps = 1e-3;
 real n0; //reference particle density
 real rho = 1.0;
@@ -248,7 +248,7 @@ void advection_and_force()
 {
     for (int i = 0; i < N; ++i)
     {
-        V_star[i] = V[i] /*+ dt * grav*/;
+        V_star[i] = V[i] + dt * grav;
         Mat<5> m_inv = M[i].inverse();
         Mat<2, 5> v_grad = Mat<2, 5>::Zero();
         Vec2i coord = (X[i] * dx_inv).cast<int>();
@@ -321,6 +321,8 @@ void solve_pressure()
                 }
             }
         }
+        triplets.push_back(Triplet(i, i, dig));
+        if(!is_near_boundary) continue;
         Vec<5> rhs_i = Vec<5>::Zero();
         for (int j = 0; j < Nb; ++j)
         {
@@ -331,7 +333,6 @@ void solve_pressure()
             rhs_i += Hrs * mn_inv * W(rij.norm()) * Q(rij, N_b[j], rs) * rs * p_n;
         }
         rhs[i] += (rhs_i[2] + rhs_i[4]);
-        triplets.push_back(Triplet(i, i, dig));
     }
 
     for (int i = 0; i < N; ++i)
@@ -348,7 +349,7 @@ void solve_pressure()
             for (int p = 1; p <= bucket[0]; ++p)
             {
                 int j = bucket[p];
-                if ((i == j)/* && (!near_boundary(X[i]))*/)
+                if ((i == j) /* && (!near_boundary(X[i]))*/)
                     continue;
                 Vec<2> rij = X[j] - X[i];
                 Vec<6> partial = Hhat * m_inv * W(rij.norm()) * Phat(rij, rs);
@@ -365,16 +366,61 @@ void solve_pressure()
     solver.compute(Laplacian);
     Pr = solver.solve(rhs);
     std::cout << "[iters: " << solver.iterations() << " error: " << solver.error() << "]" << std::endl;
+    /*Eigen::SparseLU<SpMat, Eigen::COLAMDOrdering<int>> solver;
+    solver.analyzePattern(Laplacian);
+    solver.factorize(Laplacian);
+    Pr = solver.solve(rhs);
+    if (current_frame == 0)
+        Eigen::saveMarketVector(Pr, "rhs.mtx");*/
 }
 
 void projection()
 {
     for (int i = 0; i < N; ++i)
     {
-        V[i] = V_star[i];
-        //TODO: pressure gradient
+        Vec2 grad_p = Vec2::Zero();
+        bool is_near_boundary = near_boundary(X[i]);
         Mat<5> m_inv = M[i].inverse();
-
+        Mat<5> mn_inv;
+        if (is_near_boundary)
+            mn_inv = (M[i] + M_n[i]).inverse();
+        Vec2i coord = (X[i] * dx_inv).cast<int>();
+        for (int d = 0; d < 9; ++d)
+        {
+            Vec2i nb = coord + nb_dirs[d];
+            if (!valid_cell(nb))
+                continue;
+            Bucket &bucket = hashing[nb[0] * grid_res + nb[1]];
+            for (int p = 1; p <= bucket[0]; ++p)
+            {
+                int j = bucket[p];
+                if (i == j)
+                    continue;
+                Vec2 rij = X[j] - X[i];
+                if (is_near_boundary)
+                {
+                    Vec<5> partial = Hrs * mn_inv * W(rij.norm()) * P(rij, rs);
+                    grad_p += partial.segment<2>(0) * (Pr[j]-Pr[i]);
+                }
+                else
+                {
+                    Vec<5> partial = Hrs * m_inv * W(rij.norm()) * P(rij, rs);
+                    grad_p += partial.segment<2>(0) * (Pr[j]-Pr[i]);
+                }
+            }
+        }
+        if(is_near_boundary)
+        {
+            for (int j = 0; j < Nb; ++j)
+            {
+                Vec2 rij = X_b[j] - X[i];
+                if (rij.norm() > re)
+                    continue;
+                real p_n = rho / dt * V_star[i].dot(N_b[j]);
+                grad_p += (Hrs * mn_inv * W(rij.norm()) * Q(rij, N_b[j], rs)).segment<2>(0) * rs * p_n;
+            }
+        }
+        V[i] = V_star[i] - dt / rho * grad_p;
     }
 }
 
@@ -395,7 +441,7 @@ int main()
     std::cout << "re: " << re << " dx: " << dx << std::endl;
     taichi::GUI gui("LSMPS", window_size, window_size);
     auto &canvas = gui.get_canvas();
-    for(current_frame=0;;++current_frame)
+    for (current_frame = 0;; ++current_frame)
     {
         advance();
         canvas.clear(0x112F41);
