@@ -50,6 +50,7 @@ std::array<Vec2, N> X, V, V_a, V_star;
 std::array<real, N> Pr;
 std::array<char, N> Lable; // 0=free, 1=near boundary
 std::array<Mat<5>, N> M;
+std::array<Mat<5>, N> M_n;
 using Bucket = std::array<int, bucket_size>;
 std::array<Bucket, grid_res * grid_res> hashing;
 std::array<Vec2, Nb> X_b, N_b;
@@ -82,6 +83,13 @@ inline Vec<5> P(const Vec2 &r, real _rs)
 {
     Vec<5> ret;
     ret << r(0) / _rs, r(1) / _rs, r(0) * r(0) / _rs, r(0) * r(1) / _rs, r(1) * r(1) / _rs;
+    return ret;
+}
+
+inline Vec<5> Q(const Vec2 &r, const Vec2 &n, real _rs)
+{
+    Vec<5> ret;
+    ret << n[0], n[1], 2 * n[0] * r[0] / rs, (n[0] * r[1] + n[1] * r[0]) / rs, 2 * n[1] * r[0] / rs;
     return ret;
 }
 
@@ -138,6 +146,20 @@ void compute_M()
                 Vec<5> pij = P(X[j] - X[i], rs);
                 M[i] += W((X[j] - X[i]).norm()) * pij * pij.transpose();
             }
+        }
+    }
+    for (int i = 0; i < N; ++i)
+    {
+        if (!near_boundary(X[i]))
+            continue;
+        M_n[i] = Mat<5>::Zero();
+        for (int j = 0; j < Nb; ++j)
+        {
+            Vec2 rij = X_b[j] - X[i];
+            if (rij.norm() > re)
+                continue;
+            Vec<5> qij = Q(rij, N_b[j], rs);
+            M_n[i] += W(rij.norm()) * qij * qij.transpose();
         }
     }
 }
@@ -248,7 +270,9 @@ void solve_pressure()
     for (int i = 0; i < N; ++i)
     {
         bool is_near_boundary = near_boundary(X[i]);
+        Mat<5> m_inv = M[i].inverse();
         Vec2i coord = (X[i] * dx_inv).cast<int>();
+        real dig = 0.0;
         for (int d = 0; d < 9; ++d)
         {
             Vec2i nb = coord + nb_dirs[d];
@@ -260,7 +284,16 @@ void solve_pressure()
                 int j = bucket[p];
                 if (i == j)
                     continue;
-                
+                Vec2 rij = X[j] - X[i];
+                if (is_near_boundary)
+                {
+                }
+                else
+                {
+                    Vec<5> partial = Hrs * m_inv * W(rij.norm()) * P(rij, rs);
+                    triplets.push_back(Triplet(i, j, -partial[2] - partial[4]));
+                    dig += (partial[2] + partial[4]);
+                }
             }
         }
     }
