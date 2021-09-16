@@ -8,6 +8,7 @@
 #include <Eigen/Sparse>
 #include <Eigen/Dense>
 #include <unsupported/Eigen/SparseExtra>
+#include <unsupported/Eigen/IterativeSolvers>
 
 // Math Type
 using real = double;
@@ -59,7 +60,7 @@ std::array<Bucket, grid_res * grid_res> hashing;
 std::array<Vec2, Nb> X_b, N_b;
 std::vector<Triplet> triplets;
 SpMat Laplacian;
-Vec<N> rhs, Pr;
+Vec<N> rhs, Pdt;
 
 inline real W(real r)
 {
@@ -82,24 +83,24 @@ inline real Wup(real r, real costheta)
     return W(r) * std::max(2 * costheta * costheta - 1, eps);
 }
 
-inline Vec<5> P(const Vec2 &r, real _rs)
+inline Vec<5> P(const Vec2 &r)
 {
     Vec<5> ret;
-    ret << r(0) / _rs, r(1) / _rs, r(0) * r(0) / _rs, r(0) * r(1) / _rs, r(1) * r(1) / _rs;
+    ret << r(0), r(1), r(0) * r(0), r(0) * r(1), r(1) * r(1);
     return ret;
 }
 
-inline Vec<6> Phat(const Vec<2> &r, real _rs)
+inline Vec<6> Phat(const Vec<2> &r)
 {
     Vec<6> ret;
-    ret << 1, r(0) / _rs, r(1) / _rs, r(0) * r(0) / _rs, r(0) * r(1) / _rs, r(1) * r(1) / _rs;
+    ret << 1, r(0), r(1), r(0) * r(0), r(0) * r(1), r(1) * r(1);
     return ret;
 }
 
-inline Vec<5> Q(const Vec2 &r, const Vec2 &n, real _rs)
+inline Vec<5> Q(const Vec2 &r, const Vec2 &n)
 {
     Vec<5> ret;
-    ret << n[0], n[1], 2 * n[0] * r[0] / rs, (n[0] * r[1] + n[1] * r[0]) / rs, 2 * n[1] * r[0] / rs;
+    ret << n[0], n[1], 2 * n[0] * r[0], (n[0] * r[1] + n[1] * r[0]), 2 * n[1] * r[0];
     return ret;
 }
 
@@ -154,13 +155,13 @@ void compute_M()
                 int j = bucket[p];
                 if (i == j)
                 {
-                    Vec<6> phat = Phat(Vec2::Zero(), rs);
+                    Vec<6> phat = Phat(Vec2::Zero());
                     //if (near_boundary(X[i]))
                     //    M_hat[i] += W(0) * phat * phat.transpose();
                     continue;
                 }
-                Vec<5> pij = P(X[j] - X[i], rs);
-                Vec<6> phat = Phat(X[j] - X[i], rs);
+                Vec<5> pij = P((X[j] - X[i]) / rs);
+                Vec<6> phat = Phat((X[j] - X[i]) / rs);
                 M[i] += W((X[j] - X[i]).norm()) * pij * pij.transpose();
                 M_hat[i] += W((X[j] - X[i]).norm()) * phat * phat.transpose();
             }
@@ -176,7 +177,7 @@ void compute_M()
             Vec2 rij = X_b[j] - X[i];
             if (rij.norm() > re)
                 continue;
-            Vec<5> qij = Q(rij, N_b[j], rs);
+            Vec<5> qij = Q(rij / rs, N_b[j]);
             M_n[i] += W(rij.norm()) * qij * qij.transpose();
         }
     }
@@ -265,10 +266,10 @@ void advection_and_force()
                     continue;
                 Vec2 rij = X[j] - X[i];
                 real costheta = rij.normalized().dot((V_a[i] - V[i]).normalized());
-                v_grad += rij * (Hrs * m_inv * Wup(rij.norm(), costheta) * P(rij, rs)).transpose();
+                v_grad += rij * (Hrs * m_inv * Wup(rij.norm(), costheta) * P(rij / rs)).transpose();
             }
         }
-        V_star[i] += v_grad * H1_inv * P(dt * (V_a[i] - V[i]), 1);
+        V_star[i] += v_grad * H1_inv * P(dt * (V_a[i] - V[i]));
     }
 }
 
@@ -286,6 +287,7 @@ void solve_pressure()
     Laplacian.setZero();
     Laplacian.resize(N, N);
     rhs.setZero();
+    triplets.clear();
     for (int i = 0; i < N; ++i)
     {
         bool is_near_boundary = near_boundary(X[i]);
@@ -309,28 +311,29 @@ void solve_pressure()
                 Vec2 rij = X[j] - X[i];
                 if (is_near_boundary)
                 {
-                    Vec<5> partial = Hrs * mn_inv * W(rij.norm()) * P(rij, rs);
+                    Vec<5> partial = Hrs * mn_inv * W(rij.norm()) * P(rij / rs);
                     triplets.push_back(Triplet(i, j, -partial[2] - partial[4]));
                     dig += (partial[2] + partial[4]);
                 }
                 else
                 {
-                    Vec<5> partial = Hrs * m_inv * W(rij.norm()) * P(rij, rs);
+                    Vec<5> partial = Hrs * m_inv * W(rij.norm()) * P(rij / rs);
                     triplets.push_back(Triplet(i, j, -partial[2] - partial[4]));
                     dig += (partial[2] + partial[4]);
                 }
             }
         }
         triplets.push_back(Triplet(i, i, dig));
-        if(!is_near_boundary) continue;
+        if (!is_near_boundary)
+            continue;
         Vec<5> rhs_i = Vec<5>::Zero();
         for (int j = 0; j < Nb; ++j)
         {
             Vec2 rij = X_b[j] - X[i];
             if (rij.norm() > re)
                 continue;
-            real p_n = rho / dt * V_star[i].dot(N_b[j]);
-            rhs_i += Hrs * mn_inv * W(rij.norm()) * Q(rij, N_b[j], rs) * rs * p_n;
+            real p_n = rho * V_star[i].dot(N_b[j]);
+            rhs_i += Hrs * mn_inv * W(rij.norm()) * Q(rij / rs, N_b[j]) * rs * p_n;
         }
         rhs[i] += (rhs_i[2] + rhs_i[4]);
     }
@@ -352,26 +355,16 @@ void solve_pressure()
                 if ((i == j) /* && (!near_boundary(X[i]))*/)
                     continue;
                 Vec<2> rij = X[j] - X[i];
-                Vec<6> partial = Hhat * m_inv * W(rij.norm()) * Phat(rij, rs);
+                Vec<6> partial = Hhat * m_inv * W(rij.norm()) * Phat(rij / rs);
                 div_v += (partial[1] * V_star[j][0] + partial[2] * V_star[j][1]);
             }
         }
-        rhs[i] -= rho / dt * div_v;
+        rhs[i] -= rho * div_v;
     }
-
     Laplacian.setFromTriplets(triplets.begin(), triplets.end());
-    if(current_frame==0)
-        Eigen::saveMarket(Laplacian, "debug.mtx");
-    Eigen::ConjugateGradient<SpMat, Eigen::Lower|Eigen::Upper> solver;
-    solver.compute(Laplacian);
-    Pr = solver.solve(rhs);
+    Eigen::GMRES<SpMat> solver(Laplacian);
+    Pdt = solver.solve(rhs);
     std::cout << "[iters: " << solver.iterations() << " error: " << solver.error() << "]" << std::endl;
-    /*Eigen::SparseLU<SpMat, Eigen::COLAMDOrdering<int>> solver;
-    solver.analyzePattern(Laplacian);
-    solver.factorize(Laplacian);
-    Pr = solver.solve(rhs);
-    if (current_frame == 0)
-        Eigen::saveMarketVector(Pr, "rhs.mtx");*/
 }
 
 void projection()
@@ -399,28 +392,28 @@ void projection()
                 Vec2 rij = X[j] - X[i];
                 if (is_near_boundary)
                 {
-                    Vec<5> partial = Hrs * mn_inv * W(rij.norm()) * P(rij, rs);
-                    grad_p += partial.segment<2>(0) * (Pr[j]-Pr[i]);
+                    Vec<5> partial = Hrs * mn_inv * W(rij.norm()) * P(rij / rs);
+                    grad_p += partial.segment<2>(0) * (Pdt[j] - Pdt[i]);
                 }
                 else
                 {
-                    Vec<5> partial = Hrs * m_inv * W(rij.norm()) * P(rij, rs);
-                    grad_p += partial.segment<2>(0) * (Pr[j]-Pr[i]);
+                    Vec<5> partial = Hrs * m_inv * W(rij.norm()) * P(rij / rs);
+                    grad_p += partial.segment<2>(0) * (Pdt[j] - Pdt[i]);
                 }
             }
         }
-        if(is_near_boundary)
+        if (is_near_boundary)
         {
             for (int j = 0; j < Nb; ++j)
             {
                 Vec2 rij = X_b[j] - X[i];
                 if (rij.norm() > re)
                     continue;
-                real p_n = rho / dt * V_star[i].dot(N_b[j]);
-                grad_p += (Hrs * mn_inv * W(rij.norm()) * Q(rij, N_b[j], rs)).segment<2>(0) * rs * p_n;
+                real p_n = rho * V_star[i].dot(N_b[j]);
+                grad_p += (Hrs * mn_inv * W(rij.norm()) * Q(rij / rs, N_b[j])).segment<2>(0) * rs * p_n;
             }
         }
-        V[i] = V_star[i] - dt / rho * grad_p;
+        V[i] = V_star[i] - 1.0 / rho * grad_p;
     }
 }
 
