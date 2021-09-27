@@ -33,6 +33,7 @@ const int bucket_size = 64;
 const real dx = 1.0 / grid_res, dx_inv = (real)grid_res;
 const real R = 0.5; //init rect side length
 const Vec2i nb_dirs[9] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0}, {-1, -1}, {0, -1}, {1, -1}};
+const int colors[3] = {0xED553B, 0xF2B134, 0x068587};
 
 //parameters
 real l0 = sqrt(R * R / N);
@@ -40,7 +41,8 @@ real dt = 1e-2;
 Vec2 grav{0, -1.0};
 real re = 3.1 * l0;
 real rs = re / 2;
-real alpha = 0.0; // particle shifting
+real alpha = 1e-3; // particle shifting
+real beta = 0.95; // boundary detection
 real eps = 1e-3;
 real n0; //reference particle density
 real rho = 1.0;
@@ -52,7 +54,7 @@ Vec2 bound_min = Vec2(0.05, 0.05), bound_max = Vec2(0.95, 0.95);
 // Data
 int current_frame;
 std::array<Vec2, N> X, V, V_a, V_star;
-std::array<char, N> Lable; // 0=free, 1=near boundary
+std::array<char, N> Label; // 0=free, 1=near wall boundary, 2=free boundary
 std::array<Mat<5>, N> M, M_n;
 std::array<Mat<6>, N> M_hat;
 using Bucket = std::array<int, bucket_size>;
@@ -115,6 +117,17 @@ inline bool near_boundary(const Vec2 &r)
            (r[1] < bound_min[1] + re) || (r[1] > bound_max[1] - re);
 }
 
+inline bool far_from_surface(const Vec2 &r){
+    real dist = 1e10;
+    for(int i=0;i<N;++i){
+        if(Label[i]==1){
+            dist = std::min(dist, (X[i]-r).norm());
+        }
+    }
+    if(dist>=re) return true;
+    else return false;
+}
+
 void reset_hashing()
 {
     std::fill(hashing.begin(), hashing.end(), Bucket{});
@@ -137,6 +150,35 @@ void reset_hashing()
     }
 }
 
+void update_label()
+{
+    std::fill(Label.begin(), Label.end(), 0);
+    for (int i = 0; i < N; ++i)
+    {
+        if (near_boundary(X[i]))
+            Label[i] = 1;
+        else
+        {
+            real n_star = 0.0;
+            Vec2i coord = (X[i] * dx_inv).cast<int>();
+            for (int d = 0; d < 9; ++d)
+            {
+                Vec2i nb = coord + nb_dirs[d];
+                if (!valid_cell(nb))
+                    continue;
+                Bucket &bucket = hashing[nb[0] * grid_res + nb[1]];
+                for (int p = 1; p <= bucket[0]; ++p)
+                {
+                    int j = bucket[p];
+                    if(i==j) continue;
+                    n_star += Wa((X[j]-X[i]).norm());
+                }
+            }
+            if(n_star < n0 * beta) Label[i] = 2;
+        }
+    }
+}
+
 void compute_M()
 {
     for (int i = 0; i < N; ++i)
@@ -156,8 +198,8 @@ void compute_M()
                 if (i == j)
                 {
                     Vec<6> phat = Phat(Vec2::Zero());
-                    //if (near_boundary(X[i]))
-                    //    M_hat[i] += W(0) * phat * phat.transpose();
+                    if (near_boundary(X[i]) || far_from_surface(X[i]))
+                        M_hat[i] += W(0) * phat * phat.transpose();
                     continue;
                 }
                 Vec<5> pij = P((X[j] - X[i]) / rs);
@@ -198,7 +240,7 @@ void init()
         for (int j = 0; j < Nx; ++j)
         {
             X[i * Nx + j] = Vec2(0.5 - R / 2 + tdx * i, 0.5 - R / 2 + tdx * j);
-            if ((i != Nx / 2) && (j != Nx / 2))
+            if ((i != Nx / 2) || (j != Nx / 2))
                 n0 += Wa((X[i * Nx + j] - ref_X).norm());
         }
     }
@@ -219,6 +261,7 @@ void init()
     }
     reset_hashing();
     compute_M();
+    update_label();
 }
 
 void particle_shifting()
@@ -249,7 +292,7 @@ void advection_and_force()
 {
     for (int i = 0; i < N; ++i)
     {
-        V_star[i] = V[i] + dt * grav;
+        V_star[i] = V[i] - dt * 1e-1 * (X[i]-Vec2(0.5, 0.5));
         Mat<5> m_inv = M[i].inverse();
         Mat<2, 5> v_grad = Mat<2, 5>::Zero();
         Vec2i coord = (X[i] * dx_inv).cast<int>();
@@ -290,10 +333,13 @@ void solve_pressure()
     triplets.clear();
     for (int i = 0; i < N; ++i)
     {
-        bool is_near_boundary = near_boundary(X[i]);
+        if(Label[i]==2){
+            triplets.push_back(Triplet(i, i, 1.0));
+            continue;
+        }
         Mat<5> m_inv = M[i].inverse();
         Mat<5> mn_inv;
-        if (is_near_boundary)
+        if (Label[i]==1)
             mn_inv = (M[i] + M_n[i]).inverse();
         Vec2i coord = (X[i] * dx_inv).cast<int>();
         real dig = 0.0;
@@ -309,22 +355,22 @@ void solve_pressure()
                 if (i == j)
                     continue;
                 Vec2 rij = X[j] - X[i];
-                if (is_near_boundary)
+                if (Label[i]==1)
                 {
                     Vec<5> partial = Hrs * mn_inv * W(rij.norm()) * P(rij / rs);
-                    triplets.push_back(Triplet(i, j, -partial[2] - partial[4]));
+                    if(Label[j]!=2) triplets.push_back(Triplet(i, j, -partial[2] - partial[4]));
                     dig += (partial[2] + partial[4]);
                 }
                 else
                 {
                     Vec<5> partial = Hrs * m_inv * W(rij.norm()) * P(rij / rs);
-                    triplets.push_back(Triplet(i, j, -partial[2] - partial[4]));
+                    if(Label[j]!=2) triplets.push_back(Triplet(i, j, -partial[2] - partial[4]));
                     dig += (partial[2] + partial[4]);
                 }
             }
         }
         triplets.push_back(Triplet(i, i, dig));
-        if (!is_near_boundary)
+        if (Label[i]!=1)
             continue;
         Vec<5> rhs_i = Vec<5>::Zero();
         for (int j = 0; j < Nb; ++j)
@@ -340,6 +386,7 @@ void solve_pressure()
 
     for (int i = 0; i < N; ++i)
     {
+        if(Label[i]==2) continue;
         Mat<6> m_inv = M_hat[i].inverse();
         Vec2i coord = (X[i] * dx_inv).cast<int>();
         real div_v = 0.0;
@@ -352,7 +399,7 @@ void solve_pressure()
             for (int p = 1; p <= bucket[0]; ++p)
             {
                 int j = bucket[p];
-                if ((i == j) /* && (!near_boundary(X[i]))*/)
+                if ((i == j)  && (!near_boundary(X[i])))
                     continue;
                 Vec<2> rij = X[j] - X[i];
                 Vec<6> partial = Hhat * m_inv * W(rij.norm()) * Phat(rij / rs);
@@ -419,10 +466,12 @@ void projection()
 
 void advance()
 {
+    std::cout << current_frame << " : " << std::flush;
     particle_shifting();
     advection_and_force();
     update_position();
     reset_hashing();
+    update_label();
     compute_M();
     solve_pressure();
     projection();
@@ -440,9 +489,9 @@ int main()
         canvas.clear(0x112F41);
         //canvas.rect(taichi::Vector2(0.04), taichi::Vector2(0.96)).radius(2).color(0x4FB99F).close();
         for (int i = 0; i < N; ++i)
-            canvas.circle(X[i][0], X[i][1]).radius(2).color(0xED553B);
+            canvas.circle(X[i][0], X[i][1]).radius(2).color(colors[Label[i]]);
         for (int i = 0; i < Nb; ++i)
-            canvas.circle(X_b[i][0], X_b[i][1]).radius(2).color(0x068587);
+            canvas.circle(X_b[i][0], X_b[i][1]).radius(2).color(0x99CDCD);
         gui.update();
     }
 }

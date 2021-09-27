@@ -23,3 +23,13 @@ target("mlsmpm")
     elseif is_os("linux") then
         add_links("X11", "pthread")
     end
+
+target("mps")
+    set_kind("binary")
+    add_files("mps.cpp")
+    add_packages("eigen", {public=true})
+    if is_os("windows") then
+        add_links("Gdi32", "User32")
+    elseif is_os("linux") then
+        add_links("X11", "pthread")
+    end
