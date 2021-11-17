@@ -30,6 +30,7 @@ const int Nx = 20, N = Nx * Nx; // free particles
 const int Nw = 30, Nb = 4 * Nw; // boundary particles
 const int grid_res = 10, window_size = 800;
 const int bucket_size = 64;
+const int N_screen = 360;
 const real dx = 1.0 / grid_res, dx_inv = (real)grid_res;
 const real R = 0.5; //init rect side length
 const Vec2i nb_dirs[9] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0}, {-1, -1}, {0, -1}, {1, -1}};
@@ -41,8 +42,8 @@ real dt = 1e-2;
 Vec2 grav{0, -1.0};
 real re = 3.1 * l0;
 real rs = re / 2;
-real alpha = 1e-3; // particle shifting
-real beta = 0.95; // boundary detection
+real alpha = 1e-2; // particle shifting
+real beta = 0.95;  // boundary detection
 real eps = 1e-3;
 real n0; //reference particle density
 real rho = 1.0;
@@ -117,15 +118,20 @@ inline bool near_boundary(const Vec2 &r)
            (r[1] < bound_min[1] + re) || (r[1] > bound_max[1] - re);
 }
 
-inline bool far_from_surface(const Vec2 &r){
+inline bool far_from_surface(const Vec2 &r)
+{
     real dist = 1e10;
-    for(int i=0;i<N;++i){
-        if(Label[i]==1){
-            dist = std::min(dist, (X[i]-r).norm());
+    for (int i = 0; i < N; ++i)
+    {
+        if (Label[i] == 1)
+        {
+            dist = std::min(dist, (X[i] - r).norm());
         }
     }
-    if(dist>=re) return true;
-    else return false;
+    if (dist >= re)
+        return true;
+    else
+        return false;
 }
 
 void reset_hashing()
@@ -159,7 +165,8 @@ void update_label()
             Label[i] = 1;
         else
         {
-            real n_star = 0.0;
+            bool screen[N_screen];
+            std::fill(screen, screen + N_screen, false);
             Vec2i coord = (X[i] * dx_inv).cast<int>();
             for (int d = 0; d < 9; ++d)
             {
@@ -170,11 +177,31 @@ void update_label()
                 for (int p = 1; p <= bucket[0]; ++p)
                 {
                     int j = bucket[p];
-                    if(i==j) continue;
-                    n_star += Wa((X[j]-X[i]).norm());
+                    if (i == j)
+                        continue;
+                    Vec2 dX = X[j] - X[i];
+                    if (dX.norm() > re)
+                        continue;
+                    real theta_ij = 180.0 / PI * (std::atan2(dX[1], dX[0]) + PI);
+                    real dtheta_ij = 180.0 / PI * std::atan2(0.5 * l0, sqrt(dX.dot(dX) - 0.25 * l0 * l0));
+                    int lowb = static_cast<int>(theta_ij - dtheta_ij) % N_screen;
+                    int rangeb = static_cast<int>(2 * dtheta_ij);
+                    for (int k = 0; k < rangeb; ++k)
+                    {
+                        int idx = (lowb + k) % N_screen;
+                        if (idx < 0)
+                            idx += N_screen;
+                        screen[idx] = true;
+                    }
                 }
             }
-            if(n_star < n0 * beta) Label[i] = 2;
+            int n_block = 0;
+            for (int k = 0; k < N_screen; ++k)
+            {
+                n_block += static_cast<int>(screen[k]);
+            }
+            if (static_cast<double>(n_block) / N_screen < 5.0 / 6.0)
+                Label[i] = 2;
         }
     }
 }
@@ -292,7 +319,7 @@ void advection_and_force()
 {
     for (int i = 0; i < N; ++i)
     {
-        V_star[i] = V[i] - dt * 1e-1 * (X[i]-Vec2(0.5, 0.5));
+        V_star[i] = V[i] - dt * 1e-1 * (X[i] - Vec2(0.5, 0.5));
         Mat<5> m_inv = M[i].inverse();
         Mat<2, 5> v_grad = Mat<2, 5>::Zero();
         Vec2i coord = (X[i] * dx_inv).cast<int>();
@@ -333,13 +360,14 @@ void solve_pressure()
     triplets.clear();
     for (int i = 0; i < N; ++i)
     {
-        if(Label[i]==2){
+        if (Label[i] == 2)
+        {
             triplets.push_back(Triplet(i, i, 1.0));
             continue;
         }
         Mat<5> m_inv = M[i].inverse();
         Mat<5> mn_inv;
-        if (Label[i]==1)
+        if (Label[i] == 1)
             mn_inv = (M[i] + M_n[i]).inverse();
         Vec2i coord = (X[i] * dx_inv).cast<int>();
         real dig = 0.0;
@@ -355,22 +383,24 @@ void solve_pressure()
                 if (i == j)
                     continue;
                 Vec2 rij = X[j] - X[i];
-                if (Label[i]==1)
+                if (Label[i] == 1)
                 {
                     Vec<5> partial = Hrs * mn_inv * W(rij.norm()) * P(rij / rs);
-                    if(Label[j]!=2) triplets.push_back(Triplet(i, j, -partial[2] - partial[4]));
+                    if (Label[j] != 2)
+                        triplets.push_back(Triplet(i, j, -partial[2] - partial[4]));
                     dig += (partial[2] + partial[4]);
                 }
                 else
                 {
                     Vec<5> partial = Hrs * m_inv * W(rij.norm()) * P(rij / rs);
-                    if(Label[j]!=2) triplets.push_back(Triplet(i, j, -partial[2] - partial[4]));
+                    if (Label[j] != 2)
+                        triplets.push_back(Triplet(i, j, -partial[2] - partial[4]));
                     dig += (partial[2] + partial[4]);
                 }
             }
         }
         triplets.push_back(Triplet(i, i, dig));
-        if (Label[i]!=1)
+        if (Label[i] != 1)
             continue;
         Vec<5> rhs_i = Vec<5>::Zero();
         for (int j = 0; j < Nb; ++j)
@@ -386,7 +416,8 @@ void solve_pressure()
 
     for (int i = 0; i < N; ++i)
     {
-        if(Label[i]==2) continue;
+        if (Label[i] == 2)
+            continue;
         Mat<6> m_inv = M_hat[i].inverse();
         Vec2i coord = (X[i] * dx_inv).cast<int>();
         real div_v = 0.0;
@@ -399,7 +430,7 @@ void solve_pressure()
             for (int p = 1; p <= bucket[0]; ++p)
             {
                 int j = bucket[p];
-                if ((i == j)  && (!near_boundary(X[i])))
+                if ((i == j) && (!near_boundary(X[i])))
                     continue;
                 Vec<2> rij = X[j] - X[i];
                 Vec<6> partial = Hhat * m_inv * W(rij.norm()) * Phat(rij / rs);

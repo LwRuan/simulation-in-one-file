@@ -24,12 +24,12 @@ using Mat = Eigen::Matrix<real, m, n>;
 #define PI 3.141592653589793238463
 
 // Constants
-const int Nx = 20, N = Nx * Nx; // free particles
-const int Nw = 30, Nb = 4 * Nw; // boundary particles
-const int grid_res = 10, window_size = 800;
-//const int Nx = 40, N = Nx * Nx; // free particles
-//const int Nw = 60, Nb = 4 * Nw; // boundary particles
-//const int grid_res = 20, window_size = 800;
+// const int Nx = 20, N = Nx * Nx; // free particles
+// const int Nw = 30, Nb = 4 * Nw; // boundary particles
+// const int grid_res = 10, window_size = 800;
+const int Nx = 40, N = Nx * Nx; // free particles
+const int Nw = 60, Nb = 4 * Nw; // boundary particles
+const int grid_res = 20, window_size = 800;
 const int bucket_size = 64;
 const real dx = 1.0 / grid_res, dx_inv = (real)grid_res;
 const real R = 0.5; //init rect side length
@@ -41,7 +41,7 @@ const int N_screen = 360;
 real l0 = sqrt(R * R / N);
 real dt = 1e-2;
 Vec2 grav{0, -1.0};
-real re = 2.1 * l0;
+real re = 3.1 * l0;
 real n0; //reference particle density
 real lambda0;
 real gamma = 0.2;
@@ -62,9 +62,13 @@ Vec<N> rhs, Pdt;
 
 inline real Wa(real r)
 {
+    // real ret = 0.0;
+    // if (r < re)
+    //     ret = re / r - 1;
+    // return ret;
     real ret = 0.0;
     if (r < re)
-        ret = re / r - 1;
+        ret = pow(1 - r / re, 2);
     return ret;
 };
 
